@@ -1,0 +1,44 @@
+﻿{
+  "uid": "enterprise-overview",
+  "title": "Enterprise Infrastructure Overview",
+  "tags": ["devops", "prometheus"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "panels": [
+    {
+      "id": 1,
+      "title": "Application Health Probe",
+      "type": "stat",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 6, "w": 8, "x": 0, "y": 0},
+      "targets": [{"expr": "probe_success", "refId": "A"}]
+    },
+    {
+      "id": 2,
+      "title": "Prometheus Scrape Targets",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 8, "y": 0},
+      "targets": [{"expr": "up", "refId": "A"}]
+    },
+    {
+      "id": 3,
+      "title": "Host CPU Utilization",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 6},
+      "targets": [
+        {
+          "expr": "100 * (1 - avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])))",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {"unit": "percent"},
+        "overrides": []
+      }
+    }
+  ]
+}
