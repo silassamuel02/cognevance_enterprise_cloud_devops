@@ -27,3 +27,13 @@ output "security_group_id" {
   description = "Security group attached to the infrastructure host"
   value       = module.compute.security_group_id
 }
+
+output "worker_ids" {
+  description = "EC2 worker instance IDs"
+  value       = module.compute.worker_ids
+}
+
+output "worker_private_ips" {
+  description = "Private IP addresses of worker nodes"
+  value       = module.compute.worker_private_ips
+}

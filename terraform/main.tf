@@ -10,11 +10,11 @@ module "compute" {
   source = "./modules/compute"
 
   project_name  = var.project_name
+  aws_region    = var.aws_region
   instance_type = var.instance_type
+  worker_count  = var.worker_count
   vpc_id        = module.network.vpc_id
   subnet_id     = module.network.public_subnet_id
   admin_cidr    = var.admin_cidr
   key_name      = var.key_name
-
-  depends_on = [module.network]
 }

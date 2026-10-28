@@ -52,3 +52,9 @@ variable "key_name" {
   default     = null
   nullable    = true
 }
+
+variable "worker_count" {
+  description = "Number of Docker Swarm worker nodes"
+  type        = number
+  default     = 1
+}
