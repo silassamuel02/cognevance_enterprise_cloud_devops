@@ -1,61 +1,250 @@
-﻿# Enterprise Cloud Infrastructure & DevOps Automation
+# Enterprise Cloud Infrastructure & DevOps Automation
+
+A DevOps infrastructure project developed as part of the Cognevance Cloud Computing & DevOps Internship.
 
 ## Project Overview
 
-This project demonstrates cloud infrastructure provisioning, container orchestration, automated deployment, monitoring, and recovery planning.
+This project demonstrates Infrastructure as Code, container orchestration, CI/CD configuration validation, application health monitoring, metrics collection, and dashboard visualization.
 
-**Status:** Initial project scaffold created; implementation in progress.
+**Implementation status:** Local Docker Swarm proof of concept successfully deployed and tested.
 
-## Planned Technology Stack
+**Cloud deployment status:** AWS infrastructure is defined using Terraform but has not been provisioned. The implementation currently runs locally using Docker Desktop.
 
-- Cloud: AWS
-- Infrastructure as Code: Terraform
-- Container orchestration: Docker Swarm
-- CI/CD: GitHub Actions
-- Container registry: Docker Hub
-- Monitoring: Prometheus
-- Dashboards: Grafana
-- Automation: PowerShell and shell scripts
+## Technology Stack
 
-## Planned Features
+| Category | Technology |
+|---|---|
+| Infrastructure as Code | Terraform |
+| Cloud Infrastructure Design | AWS |
+| Containerization | Docker |
+| Container Orchestration | Docker Swarm |
+| CI/CD | GitHub Actions |
+| Container Registry | Docker Hub |
+| Metrics Collection | Prometheus |
+| Monitoring Dashboard | Grafana |
+| Health Monitoring | Prometheus Blackbox Exporter |
+| System Metrics | Node Exporter |
+| Automation | PowerShell |
 
-1. Infrastructure provisioning using Terraform.
-2. Containerized application deployment.
-3. Automated testing, image building, and publishing.
-4. Automated deployment workflow.
-5. Monitoring and application health checks.
-6. Security configuration and secrets management.
-7. Backup and disaster recovery procedures.
-8. Infrastructure documentation and architecture diagrams.
+## Implemented Features
+
+### 1. Infrastructure as Code
+
+Terraform configuration defines the proposed AWS infrastructure, including:
+
+- Virtual Private Cloud (VPC).
+- Public subnet and internet gateway.
+- Route table and network configuration.
+- EC2 manager and worker instances.
+- Security groups.
+- IAM roles and policies.
+- Secure Swarm worker-token distribution using AWS Systems Manager Parameter Store.
+
+Terraform formatting, initialization without a backend, and configuration validation were completed successfully.
+
+**Note:** These resources have not been deployed to AWS.
+
+### 2. Docker Swarm Orchestration
+
+A local Docker Swarm cluster was initialized using Docker Desktop.
+
+The stack contains five services:
+
+| Service | Replicas | Purpose |
+|---|---:|---|
+| Application | 2 | Runs the Node.js application |
+| Prometheus | 1 | Collects metrics |
+| Grafana | 1 | Displays monitoring dashboards |
+| Blackbox Exporter | 1 | Checks application availability |
+| Node Exporter | 1 | Collects system metrics |
+
+Additional configurations include health checks, restart policies, overlay networking, service update policies, and Docker secrets.
+
+### 3. CI/CD Configuration Validation
+
+GitHub Actions automatically validates infrastructure configuration when changes are pushed to the repository.
+
+The workflow checks:
+
+- Terraform formatting.
+- Terraform initialization and validation.
+- YAML configuration syntax.
+- Grafana dashboard JSON.
+- Docker Swarm stack configuration.
+
+This workflow performs configuration validation. It does not automatically deploy infrastructure to AWS or Docker Swarm.
+
+### 4. Monitoring and Visualization
+
+Prometheus collects metrics from configured monitoring targets.
+
+Grafana uses Prometheus as its data source and provisions an Enterprise Infrastructure Overview dashboard.
+
+The dashboard contains three panels:
+
+- Application Health Probe.
+- Prometheus Scrape Targets.
+- Host CPU Utilization.
+
+The application health endpoint was tested successfully and returned `healthy`.
+
+### 5. Security
+
+Security-related configurations include:
+
+- Docker Swarm secrets for Grafana credentials.
+- No hardcoded Grafana administrator password in the repository.
+- AWS IAM roles and restricted infrastructure access in the Terraform design.
+- GitHub Actions read-only repository permissions.
+- Git ignore rules for Terraform state, plans, credentials, and sensitive files.
 
 ## Project Structure
 
 ```text
-terraform/       Infrastructure configuration
-docker/swarm/    Container orchestration
-.github/         GitHub Actions workflows
-monitoring/      Prometheus and Grafana configuration
-scripts/         Deployment, validation, backup and restore scripts
-docs/            Architecture and project documentation
-backups/         Backup planning and recovery artifacts
+cognevance_enterprise_cloud_devops/
+│
+├── .github/
+│   └── workflows/
+│       └── ci-cd.yml
+│
+├── terraform/
+│   ├── modules/
+│   │   ├── compute/
+│   │   └── network/
+│   ├── providers.tf
+│   ├── main.tf
+│   ├── variables.tf
+│   ├── outputs.tf
+│   └── terraform.tfvars.example
+│
+├── docker/
+│   └── swarm/
+│       └── stack.yml
+│
+├── monitoring/
+│   ├── prometheus/
+│   │   └── prometheus.yml
+│   └── grafana/
+│       ├── dashboards/
+│       └── provisioning/
+│
+├── scripts/
+│   ├── validate.ps1
+│   ├── deploy.ps1
+│   ├── backup.ps1
+│   └── restore.ps1
+│
+├── docs/
+│   ├── architecture/
+│   ├── screenshots/
+│   └── project-report.md
+│
+├── backups/
+├── .gitignore
+└── README.md
 ```
 
-## Prerequisites
+## Local Deployment
 
-- Git and GitHub
-- Terraform CLI
-- AWS CLI and an appropriately configured AWS account
-- Docker Desktop
-- Docker Hub account
+### Prerequisites
 
-The implementation and deployment prerequisites will be verified as the project progresses.
+- Windows with Docker Desktop.
+- Docker CLI and Docker Swarm support.
+- Terraform CLI.
+- Docker Hub access to pull the application image.
 
-## Deployment and Cost Safety
+### Step 1: Initialize Docker Swarm
 
-AWS resources can incur charges. Review Terraform plans before provisioning resources, restrict network access, and remove temporary resources when testing is complete.
+```powershell
+docker swarm init
+```
 
-Never commit AWS credentials, Docker Hub tokens, private keys, or other secrets to this repository.
+Run this only if Swarm has not already been initialized.
 
-## Project Status
+### Step 2: Create the Grafana Secret
 
-The initial directory structure and configuration-file placeholders have been created. Infrastructure, deployment, monitoring, and recovery configurations still need to be implemented and tested.
+Create an external Docker Swarm secret named:
+
+```text
+grafana_admin_password
+```
+
+Use your own private password. Do not commit the password or its source file to GitHub.
+
+### Step 3: Validate and Deploy the Stack
+
+From the repository root:
+
+```powershell
+cd docker/swarm
+
+docker stack config --compose-file .\stack.yml
+
+docker stack deploy --compose-file .\stack.yml cognevance
+```
+
+### Step 4: Verify Services
+
+```powershell
+docker stack services cognevance
+```
+
+### Step 5: Access the Application and Dashboard
+
+| Component | Local URL |
+|---|---|
+| Application health | http://localhost/health |
+| Grafana dashboard | http://localhost:3000 |
+
+Log in to Grafana using the administrator credentials configured through the Docker secret.
+
+### Step 6: Remove the Stack
+
+```powershell
+docker stack rm cognevance
+```
+
+## Terraform Validation
+
+From the repository root:
+
+```powershell
+cd terraform
+
+terraform fmt -check -recursive
+terraform init -backend=false
+terraform validate
+```
+
+The optional AWS deployment script includes an explicit confirmation before Terraform apply. AWS credentials and an appropriately configured AWS account would be required.
+
+**Do not run Terraform apply unless AWS resource costs have been reviewed and deployment is intended.**
+
+## Validation Results
+
+The following local checks were completed successfully:
+
+- Terraform formatting and validation.
+- Docker Swarm stack configuration validation.
+- Five Docker Swarm services running.
+- Two application replicas running.
+- Application health endpoint returning `healthy`.
+- Grafana dashboard automatically provisioned.
+- Prometheus metrics visible in Grafana.
+- GitHub Actions infrastructure validation workflow passed.
+
+## Limitations and Future Improvements
+
+- Actual AWS infrastructure deployment has not been performed.
+- The local Swarm setup uses a single Docker Desktop node, not a multi-host high-availability cluster.
+- Node Exporter metrics represent the Docker Desktop Linux environment, not necessarily the physical Windows host.
+- Backup and restore automation still requires implementation and testing.
+- Production deployment, disaster recovery testing, and multi-node failure testing remain future improvements.
+
+## Internship Information
+
+**Organization:** Cognevance  
+**Project:** Enterprise Cloud Infrastructure & DevOps Automation  
+**Repository:** [GitHub Repository](https://github.com/silassamuel02/cognevance_enterprise_cloud_devops)
+
+This project demonstrates practical DevOps concepts through a locally deployed and validated infrastructure proof of concept, with an AWS Terraform design for future cloud deployment.
