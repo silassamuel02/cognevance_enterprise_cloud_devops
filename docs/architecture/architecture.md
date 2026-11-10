@@ -1,120 +1,153 @@
-﻿# Enterprise Cloud Infrastructure & DevOps Automation
+# Enterprise Cloud Infrastructure & DevOps Automation
 
-## 1. Architecture Overview
+## 1. Project Status and Scope
 
-The proposed architecture uses AWS for cloud infrastructure, Terraform for Infrastructure as Code, Docker Swarm for container orchestration, GitHub Actions for CI/CD, and Prometheus with Grafana for monitoring.
+This project was developed for the Cognevance Cloud Computing & DevOps Internship.
 
-This is a proposed implementation design. Components will be marked complete only after configuration and testing.
+The completed implementation is a **local Docker Swarm proof of concept** running on Docker Desktop. Terraform contains an AWS infrastructure design that has passed local formatting and configuration validation, but **no AWS resources have been provisioned**.
 
-## 2. Architecture Components
+The current local environment is a single Docker Desktop Swarm node. It demonstrates service orchestration, replicas, monitoring, and recovery scripting, but it is not a multi-host or production high-availability cluster.
 
-| Component | Technology | Responsibility |
-|---|---|---|
-| Cloud infrastructure | AWS | Provides network and compute resources |
-| Infrastructure as Code | Terraform | Defines and manages cloud resources |
-| Container runtime | Docker | Builds and runs application containers |
-| Container orchestration | Docker Swarm | Manages services and container placement |
-| Source control | GitHub | Stores application and configuration files |
-| CI/CD | GitHub Actions | Tests code, builds images, and automates publishing |
-| Container registry | Docker Hub | Stores versioned application images |
-| Metrics collection | Prometheus | Collects application and infrastructure metrics |
-| Visualization | Grafana | Displays monitoring dashboards |
-| Recovery automation | PowerShell scripts | Supports backup and restore procedures |
+## 2. Architecture Diagram
 
-## 3. Proposed Deployment Flow
+The diagram separates the AWS design from the local environment actually deployed.
 
-1. A developer pushes code to the GitHub repository.
-2. GitHub Actions checks out the source and installs dependencies.
-3. Automated tests run.
-4. The workflow builds a Docker image.
-5. The image is published to Docker Hub.
-6. The deployment process retrieves the selected image.
-7. Docker Swarm runs the application as a service.
-8. Prometheus collects configured metrics.
-9. Grafana displays the available metrics and service health.
+```mermaid
+flowchart TB
+    DEV[Developer] -->|Push source and configuration| GH[GitHub repository]
+    GH -->|Push / pull request| CI[GitHub Actions]
+    CI --> VAL[Terraform fmt and validate<br/>YAML, JSON, Docker stack checks]
+    TF[Terraform AWS design<br/>VPC, subnet, route, EC2, IAM, security group]
+    CI -.->|Validates only, does not deploy| TF
 
-## 4. Proposed AWS Infrastructure
+    DEV -->|Manual Docker CLI deployment| SWARM[Docker Desktop<br/>Single-node Swarm manager]
+    subgraph LOCAL[Local Docker Swarm overlay network]
+        APP[Node.js application<br/>2 replicas]
+        BB[Blackbox Exporter]
+        NE[Node Exporter]
+        PROM[Prometheus]
+        GRAF[Grafana]
+        APP -->|HTTP health endpoint| BB
+        BB -->|Probe metrics| PROM
+        NE -->|Host metrics from Docker Desktop Linux VM| PROM
+        PROM -->|Prometheus data source| GRAF
+    end
+    SWARM --> LOCAL
 
-The planned AWS environment includes:
+    BACKUP[PowerShell backup script] -->|Pause services and archive volumes| DATA[(Grafana and Prometheus volumes)]
+    BACKUP --> CFG[(Project configuration archive<br/>SHA-256 manifest)]
+    RESTORE[PowerShell restore script] -->|Checksum verification and guarded restore| DATA
+```
 
-- A Virtual Private Cloud (VPC).
-- A public subnet for the initial demonstration environment.
-- Security groups with restricted inbound access.
-- EC2 instances for Docker Swarm management and worker capacity.
-- Persistent storage or a defined backup destination where required.
-- Monitoring and logging configuration.
+## 3. Component Inventory
 
-The final instance count, subnet design, availability strategy, and storage configuration will be chosen before deployment based on cost and operational requirements.
+| Component | Technology | Current role | Deployment status |
+|---|---|---|---|
+| Cloud infrastructure design | AWS and Terraform | Defines proposed VPC, subnet, internet gateway, routes, EC2 nodes, IAM and security groups | Validated locally; not applied |
+| Container orchestration | Docker Swarm | Runs the local application and monitoring services | Running on one Docker Desktop node |
+| Application | Node.js container from Docker Hub | Exposes the /health endpoint on port 3000 | 2 replicas running |
+| Metrics collection | Prometheus | Scrapes Prometheus, Node Exporter, and Blackbox Exporter | Running locally |
+| HTTP probe | Blackbox Exporter | Probes the application health endpoint | Running locally |
+| Host metrics | Node Exporter | Exposes metrics from the Docker Desktop Linux environment | Running locally |
+| Dashboard | Grafana | Uses Prometheus as its data source and provisions the Enterprise Infrastructure Overview dashboard | Running locally |
+| CI validation | GitHub Actions | Validates Terraform, YAML, JSON, and Docker Swarm configuration | Successful workflow runs |
+| Backup and restore | PowerShell and Docker CLI | Archives monitoring volumes and project configuration; verifies hashes before restore | Scripts implemented; local execution test pending |
 
-## 5. Container Orchestration
+## 4. Local Service Topology
 
-Docker Swarm will manage the application service across the configured cluster.
+The Docker Swarm stack is defined in **docker/swarm/stack.yml**.
 
-The implementation will aim to include:
+| Service | Desired replicas | Published port | Purpose |
+|---|---:|---:|---|
+| cognevance_app | 2 | Host 80 to container 3000 | Demonstration application |
+| cognevance_prometheus | 1 | Internal 9090 | Metrics database and query engine |
+| cognevance_blackbox-exporter | 1 | Internal 9115 | HTTP availability probes |
+| cognevance_node-exporter | 1 global task | Internal 9100 | Host metrics |
+| cognevance_grafana | 1 | Host 3000 to container 3000 | Monitoring dashboard |
 
-- A manager node and worker capacity.
-- A defined service image and replica count.
-- Health checks and restart policies.
-- Controlled service updates and rollback procedures.
-- Restricted management traffic between cluster nodes.
+All services join the monitoring overlay network. Prometheus and Grafana use named volumes for persistent monitoring data. Grafana administrator credentials are supplied through the external Docker Swarm secret named grafana_admin_password, not stored in the repository.
 
-A small demonstration cluster is not equivalent to a production high-availability environment. Production resilience requires additional nodes, failure testing, and appropriate availability-zone design.
+The stack was verified with docker stack config, and the services were observed running with the expected replica counts. The application health endpoint returned healthy. Grafana displayed the application probe, Prometheus target, and CPU panels.
 
-## 6. Security Plan
+## 5. CI Validation Workflow
 
-- Store AWS credentials and access tokens outside source control.
-- Use least-privilege IAM permissions.
-- Restrict SSH access to an approved source IP.
-- Expose only required application and monitoring ports.
-- Avoid exposing Docker management ports to the public internet.
-- Use GitHub repository secrets for CI/CD credentials.
-- Review Terraform plans before applying changes.
+The workflow in **.github/workflows/ci-cd.yml** runs on pushes to main, pull requests targeting main, and manual dispatch.
 
-## 7. Monitoring and Logging
+It checks:
 
-Prometheus will collect metrics from configured targets. Grafana will use Prometheus as a data source and display dashboards.
+1. Terraform formatting.
+2. Terraform initialization without a remote backend.
+3. Terraform configuration validation.
+4. YAML syntax for workflow, Swarm, and monitoring files.
+5. JSON syntax for the Grafana dashboard.
+6. Docker Swarm stack configuration.
 
-Planned monitoring includes:
+**Scope clarification:** This is a configuration validation workflow. It does not publish a new application image and does not perform an automatic deployment to AWS or Docker Swarm. The local stack is deployed manually with Docker CLI commands.
 
-- Application availability and health.
-- CPU and memory utilization.
-- Container and service status.
-- Deployment outcomes.
-- Relevant application and infrastructure logs.
+## 6. AWS Terraform Design
 
-Monitoring coverage will depend on which exporters and application metrics are configured.
+The Terraform configuration is organized into reusable network and compute modules.
 
-## 8. Backup and Disaster Recovery
+The network module defines:
+- A VPC with DNS support and hostnames enabled.
+- A public subnet.
+- An internet gateway.
+- A public route table and subnet association.
 
-The project will document:
+The compute module defines:
+- An Amazon Linux EC2 manager and configurable worker instances.
+- A security group with HTTP access and node-to-node Docker Swarm traffic.
+- Optional SSH ingress restricted to a supplied administrator CIDR.
+- IAM roles and instance profiles.
+- Systems Manager access for manager and worker instances.
+- A SecureString parameter used to pass the worker join token from the manager to workers.
+- Encrypted gp3 root volumes and IMDSv2 token enforcement.
 
-- Which configuration and application data must be backed up.
-- Backup destination and retention policy.
-- Recovery steps and restore validation.
-- Procedures for rebuilding infrastructure from Terraform.
-- Recovery limitations and dependencies.
+This is an infrastructure design only. It has not been applied to an AWS account, and no claim of a live AWS deployment is made.
 
-Backup and restore scripts will be tested against the resources and data they are designed to handle.
+## 7. Backup and Restore Design
 
-## 9. Cost and Cleanup
+**scripts/backup.ps1** creates a timestamped backup folder under backups/ by default. It:
 
-Cloud resources may incur charges. Before deployment:
+1. Checks for the expected Grafana and Prometheus Swarm services.
+2. Records their existing replica counts.
+3. Scales both monitoring services to zero to reduce write activity during volume capture.
+4. Archives the stack's Grafana and Prometheus named volumes.
+5. Archives project source/configuration files while excluding Terraform state, provider caches, local backup output, credentials, and private keys.
+6. Writes a manifest with artifact SHA-256 hashes.
+7. Restores the original monitoring service replica counts in a finally block.
 
-1. Review the expected AWS resource costs.
-2. Inspect Terraform plans.
-3. Restrict public access.
-4. Monitor resource usage.
-5. Destroy temporary resources after testing when they are no longer needed.
+**scripts/restore.ps1**:
+- Requires a backup folder and the -ConfirmRestore switch.
+- Validates the manifest, stack name, required artifacts, and SHA-256 hashes.
+- Refuses to overwrite volumes while services from the target stack still exist.
+- Requires the operator to type RESTORE before replacing volume contents.
+- Restores the two named volumes.
 
-Never commit credentials, private keys, access tokens, or sensitive state files to the repository.
+Docker Swarm secrets are intentionally not exported. The external grafana_admin_password secret must be available separately when the stack is redeployed. The project-configuration ZIP is a supplementary archive and is not automatically extracted by the restore script.
 
-## 10. Current Status
+**Testing status:** The scripts are implemented. A successful backup and restore execution has not yet been recorded as evidence in this repository.
 
-- Project directory structure: created.
-- Initial README: prepared.
-- Architecture document: proposed design being documented.
-- Terraform infrastructure: not yet implemented.
-- Docker Swarm deployment: not yet implemented.
-- CI/CD workflow: not yet configured for this project.
-- Prometheus and Grafana: not yet configured.
-- Backup and disaster recovery: planned, not yet validated.
+## 8. Security Considerations
+
+- Grafana's administrator password is provided through a Docker Swarm secret.
+- The secret value is not written to the repository or backup archive.
+- Terraform state, plans, local variables, and provider caches are excluded from source control.
+- The Terraform design uses IAM roles and limits optional SSH ingress to a supplied CIDR.
+- The local stack publishes the application and Grafana ports on the Docker Desktop host. Keep the environment on a trusted machine/network and do not expose these ports through a router or public firewall.
+- The AWS Terraform design and deployment script have not been exercised against a live AWS account.
+
+## 9. Performance and Scalability
+
+The local application is configured with two Swarm replicas, a health check, restart policy, controlled update behavior, and rollback configuration. Prometheus collects CPU metrics exposed by Node Exporter.
+
+The demonstration does not include a multi-node scaling benchmark, load test, autoscaling policy, or multi-host failure test. The two application replicas run on the same Docker Desktop node, so they demonstrate service replication but not host-level fault tolerance.
+
+## 10. Known Limitations and Future Work
+
+- Provision and test the Terraform AWS design only after reviewing costs and access controls.
+- Extend the local Swarm proof of concept to multiple hosts if cluster-level availability must be demonstrated.
+- Add an automated deployment stage if a real deployment target is introduced.
+- Add centralized application/container log aggregation; the current monitoring stack focuses on metrics and health probes.
+- Execute and document backup/restore tests.
+- Add final screenshots and a completed project report to docs/.
