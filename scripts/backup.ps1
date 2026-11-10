@@ -96,19 +96,36 @@ try {
         }
     }
 
-    $configurationPaths = @(
-        ".github",
-        "docker",
-        "monitoring",
-        "terraform",
-        "scripts",
-        "docs",
-        "README.md",
-        ".gitignore"
-    ) | ForEach-Object { Join-Path $projectRoot $_ } | Where-Object { Test-Path $_ }
+    # Archive only project source/configuration files. Exclude Terraform state,
+    # local provider caches, backup output, credentials, and private keys.
+    $configurationFiles = @()
+    $configurationFolders = @(".github", "docker", "monitoring", "terraform", "scripts", "docs")
+    foreach ($folder in $configurationFolders) {
+        $folderPath = Join-Path $projectRoot $folder
+        if (Test-Path -LiteralPath $folderPath -PathType Container) {
+            $configurationFiles += Get-ChildItem -LiteralPath $folderPath -File -Recurse | Where-Object {
+                $relativePath = $_.FullName.Substring($projectRoot.Length).TrimStart([char[]]"\/")
+                $segments = $relativePath -split '[\\/]'
+                $safeDirectory = ($segments -notcontains ".terraform") -and ($segments -notcontains "backups") -and ($segments -notcontains ".git")
+                $sensitiveName = $_.Name -match '(?i)(^\.env|terraform\.tfstate|\.tfplan$|^terraform\.tfvars$|\.pem$|\.key$|^id_rsa)'
+                $safeDirectory -and -not $sensitiveName
+            }
+        }
+    }
+
+    foreach ($rootFile in @("README.md", ".gitignore")) {
+        $rootPath = Join-Path $projectRoot $rootFile
+        if (Test-Path -LiteralPath $rootPath -PathType Leaf) {
+            $configurationFiles += Get-Item -LiteralPath $rootPath
+        }
+    }
+
+    if ($configurationFiles.Count -eq 0) {
+        throw "No project configuration files were found to archive."
+    }
 
     $configurationArchive = Join-Path $backupDirectory "project-configuration.zip"
-    Compress-Archive -Path $configurationPaths -DestinationPath $configurationArchive -CompressionLevel Optimal -Force
+    Compress-Archive -Path $configurationFiles.FullName -DestinationPath $configurationArchive -CompressionLevel Optimal -Force
 
     $artifactFiles = @("grafana_data.tar.gz", "prometheus_data.tar.gz", "project-configuration.zip")
     $hashes = [ordered]@{}
@@ -126,7 +143,7 @@ try {
         notes         = @(
             "Grafana and Prometheus services were scaled to zero during volume capture and restored to their original replica counts afterward.",
             "Docker Swarm secrets are intentionally not exported. Recreate required external secrets separately.",
-            "This backup covers Grafana and Prometheus named volumes plus project configuration. The stateless demo application has no persistent application-data volume."
+            "This backup covers Grafana and Prometheus named volumes plus project source/configuration. Terraform state, local provider caches, credentials, and private keys are excluded."
         )
     }
 
