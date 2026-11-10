@@ -67,3 +67,23 @@ jobs:
       - name: Validate Docker Swarm stack configuration
         working-directory: docker/swarm
         run: docker stack config --compose-file stack.yml
+
+      - name: Validate PowerShell script syntax
+        shell: pwsh
+        run: |
+          $scripts = Get-ChildItem -Path scripts -Filter *.ps1 -File
+          foreach ($script in $scripts) {
+            $tokens = $null
+            $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile(
+              $script.FullName,
+              [ref]$tokens,
+              [ref]$errors
+            )
+            if ($errors.Count -gt 0) {
+              $errors | Format-List
+              throw "PowerShell syntax validation failed: $($script.Name)"
+            }
+            Write-Host "Valid PowerShell: $($script.Name)"
+          }
+
