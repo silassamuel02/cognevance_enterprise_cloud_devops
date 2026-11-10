@@ -220,6 +220,35 @@ The optional AWS deployment script includes an explicit confirmation before Terr
 
 **Do not run Terraform apply unless AWS resource costs have been reviewed and deployment is intended.**
 
+## Backup and Restore
+
+The project includes PowerShell scripts for the local Swarm monitoring data:
+
+- `scripts/backup.ps1` pauses Grafana and Prometheus, archives their named volumes, creates a project-configuration ZIP, writes SHA-256 checksums, and restores the original service replica counts.
+- `scripts/restore.ps1` verifies the manifest and checksums before restoring the Grafana and Prometheus volumes. It requires the stack services to be removed, the `-ConfirmRestore` switch, and the typed confirmation `RESTORE`.
+
+Run a backup from the repository root:
+
+```powershell
+.\scripts\backup.ps1
+```
+
+Restore only when necessary. First remove the stack and wait until its services disappear:
+
+```powershell
+docker stack rm cognevance
+```
+
+Then supply the exact backup directory:
+
+```powershell
+.\scripts\restore.ps1 -BackupPath .\backups\cognevance-YYYYMMDD-HHMMSSZ -ConfirmRestore
+```
+
+The restore replaces the contents of the two monitoring volumes. Review the backup path carefully. Docker Swarm secrets are not exported; the external `grafana_admin_password` secret must be available separately before redeploying. The configuration ZIP is not automatically extracted.
+
+**Testing status:** The backup and restore scripts are implemented; local execution and restore validation are still pending.
+
 ## Validation Results
 
 The following local checks were completed successfully:
@@ -231,15 +260,15 @@ The following local checks were completed successfully:
 - Application health endpoint returning `healthy`.
 - Grafana dashboard automatically provisioned.
 - Prometheus metrics visible in Grafana.
-- GitHub Actions infrastructure validation workflow passed.
+- GitHub Actions infrastructure validation workflow passed, including PowerShell syntax checks.
 
 ## Limitations and Future Improvements
 
 - Actual AWS infrastructure deployment has not been performed.
 - The local Swarm setup uses a single Docker Desktop node, not a multi-host high-availability cluster.
 - Node Exporter metrics represent the Docker Desktop Linux environment, not necessarily the physical Windows host.
-- Backup and restore automation still requires implementation and testing.
-- Production deployment, disaster recovery testing, and multi-node failure testing remain future improvements.
+- Backup and restore scripts still require a successful local execution and recovery test.
+- Production deployment, centralized logging, disaster recovery testing, and multi-node failure testing remain future improvements.
 
 ## Internship Information
 
